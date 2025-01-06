@@ -75,7 +75,7 @@
 #### 如何获取登录令牌
 
 方法一：从浏览器请求中获取（推荐）
-1. 在浏览器中访问 [DeSpeed](https://app.despeed.net) 并登录您的账号
+1. 在浏览器中访问 [DeSpeed](https://app.despeed.net/register?ref=2kNPSl8sHTNG) 并登录您的账号
 2. 按 F12 打开浏览器开发者工具
 3. 切换到 Network（网络）标签页
 4. 在筛选框中输入 `dashboard-stats` 或 `api`
