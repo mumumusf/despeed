@@ -52,12 +52,12 @@
 
 1. 使用 Git 克隆项目或直接下载项目文件到 VPS：
    ```bash
-   git clone [项目地址] 或者
-   wget [项目压缩包地址]
+   git clone https://github.com/mumumusf/despeed.git
+   
    ```
 2. 进入项目文件夹：
    ```bash
-   cd [项目文件夹名]
+   cd despeed
    ```
 3. 安装项目依赖：
    ```bash
