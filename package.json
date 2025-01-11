@@ -1,0 +1,16 @@
+{
+  "name": "despeed-bot",
+  "version": "1.0.0",
+  "description": "A bot that simulates DeSpeed browser extension behavior",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "https-proxy-agent": "^5.0.1",
+    "node-fetch": "^2.7.0",
+    "socks-proxy-agent": "^7.0.0",
+    "uuid": "^8.3.2",
+    "ws": "^8.18.0"
+  }
+}
