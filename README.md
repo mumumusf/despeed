@@ -31,7 +31,22 @@
 - 512MB 以上内存
 - Ubuntu/Debian/CentOS 系统
 
-### 2. 安装依赖
+### 2. 克隆代码
+
+```bash
+# 克隆仓库
+git clone https://github.com/mumumusf/despeed.git
+
+# 进入项目目录
+cd despeed
+
+# 安装依赖
+npm install
+```
+
+### 3. 安装依赖
+
+如果你想手动配置，也可以按照以下步骤操作：
 
 ```bash
 # 安装 Node.js（Ubuntu/Debian）
@@ -50,7 +65,7 @@ npm init -y
 npm install node-fetch@2 https-proxy-agent socks-proxy-agent ws
 ```
 
-### 3. 配置准备
+### 4. 配置准备
 
 1. [注册 DeSpeed 账号](https://app.despeed.net/register?ref=2kNPSl8sHTNG)
 2. 准备代理信息（可选，格式：`IP:端口:用户名:密码`）
@@ -85,7 +100,7 @@ npm install node-fetch@2 https-proxy-agent socks-proxy-agent ws
 > - 长度大约在 150-250 字符之间
 > - 示例：`eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6Njc1NSwiZW1haWwiOiJ...`
 
-### 4. 运行脚本
+### 5. 运行脚本
 
 ```bash
 # 创建 Screen 会话
