@@ -109,7 +109,7 @@ screen -S despeed
 # 启动脚本
 node bot.js
 
-请设置120分钟 保证你的代理是干净的
+请设置30分钟 保证你的代理是干净的
 # 后台运行（Ctrl+A 然后按 D）
 # 重新连接：screen -r despeed
 ```
