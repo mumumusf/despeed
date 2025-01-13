@@ -35,7 +35,10 @@ const config = {
     host: "",
     port: "",
     username: "",
-    password: ""
+    password: "",
+    timeout: 10000,
+    maxRetries: 3,
+    testUrl: "https://api.ipify.org?format=json"
   }
 };
 
@@ -63,21 +66,92 @@ function parseProxyString(proxyStr) {
   }
 }
 
+// 验证代理配置
+function validateProxyConfig(proxyConfig) {
+  return !!(proxyConfig.host && proxyConfig.port);
+}
+
+// 检查代理可用性
+async function isProxyAlive(proxyAgent) {
+  try {
+    const response = await fetch(config.proxy.testUrl, {
+      agent: proxyAgent,
+      timeout: config.proxy.timeout
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+// 改进的代理创建函数
+async function getProxyAgent(retries = config.proxy.maxRetries) {
+  if (!config.proxy.enabled) return undefined;
+  
+  if (!validateProxyConfig(config.proxy)) {
+    console.error('代理配置无效');
+    return undefined;
+  }
+
+  for (let i = 0; i < retries; i++) {
+    try {
+      let proxyUrl;
+      const auth = config.proxy.username && config.proxy.password 
+        ? `${encodeURIComponent(config.proxy.username)}:${encodeURIComponent(config.proxy.password)}@`
+        : '';
+        
+      if (config.proxy.type === 'http') {
+        proxyUrl = `http://${auth}${config.proxy.host}:${config.proxy.port}`;
+        const agent = new HttpsProxyAgent({
+          proxy: proxyUrl,
+          timeout: config.proxy.timeout,
+          keepAlive: true,
+          maxFreeSockets: 256,
+          maxSockets: 256
+        });
+        
+        if (await isProxyAlive(agent)) {
+          return agent;
+        }
+      } else {
+        proxyUrl = `socks://${auth}${config.proxy.host}:${config.proxy.port}`;
+        const agent = new SocksProxyAgent({
+          proxy: proxyUrl,
+          timeout: config.proxy.timeout,
+          keepAlive: true
+        });
+        
+        if (await isProxyAlive(agent)) {
+          return agent;
+        }
+      }
+      
+      console.warn(`代理检测失败，重试 ${i + 1}/${retries}`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+      
+    } catch (error) {
+      console.error(`代理创建错误 (${i + 1}/${retries}):`, error.message);
+      if (i === retries - 1) {
+        throw new Error('代理创建失败，已达到最大重试次数');
+      }
+    }
+  }
+  
+  return undefined;
+}
+
 // 生成随机位置
 function generateRandomLocation() {
-  // 中国大陆的地理范围
   const bounds = {
-    minLat: 18.0,  // 最南端
-    maxLat: 53.55, // 最北端
-    minLng: 73.66, // 最西端
-    maxLng: 135.05 // 最东端
+    minLat: 18.0,
+    maxLat: 53.55,
+    minLng: 73.66,
+    maxLng: 135.05
   };
   
-  // 生成随机经纬度
   const latitude = bounds.minLat + Math.random() * (bounds.maxLat - bounds.minLat);
   const longitude = bounds.minLng + Math.random() * (bounds.maxLng - bounds.minLng);
   
-  // 保留6位小数
   return {
     latitude: Math.round(latitude * 1000000) / 1000000,
     longitude: Math.round(longitude * 1000000) / 1000000
@@ -116,7 +190,6 @@ async function initConfig() {
   const interval = await question('请输入检查间隔(分钟，默认1分钟): ');
   config.checkInterval = (parseInt(interval) || 1) * 60000;
 
-  // 生成随机位置
   config.location = generateRandomLocation();
   console.log('\n已随机生成测速位置:', config.location);
 
@@ -126,27 +199,6 @@ async function initConfig() {
   console.log('当前配置：');
   console.log(JSON.stringify(config, null, 2));
   console.log('\n');
-}
-
-// 获取代理agent
-function getProxyAgent() {
-  if (!config.proxy.enabled) return undefined;
-
-  let proxyUrl;
-  if (config.proxy.type === 'http') {
-    proxyUrl = `http://${config.proxy.username}:${config.proxy.password}@${config.proxy.host}:${config.proxy.port}`;
-  } else {
-    proxyUrl = `socks://${config.proxy.username}:${config.proxy.password}@${config.proxy.host}:${config.proxy.port}`;
-  }
-
-  try {
-    return config.proxy.type === 'http'
-      ? new HttpsProxyAgent(proxyUrl)
-      : new SocksProxyAgent(proxyUrl);
-  } catch (error) {
-    console.error('代理配置错误:', error);
-    return undefined;
-  }
 }
 
 // 获取通用请求头
@@ -166,7 +218,7 @@ function getCommonHeaders() {
   };
 }
 
-// 验证token是否有效
+// 验证token
 async function validateToken() {
   if (!config.token) {
     throw new Error('Token not found');
@@ -177,63 +229,16 @@ async function validateToken() {
     throw new Error('Token expired');
   }
 
-  // 获取用户资料
+  const proxyAgent = await getProxyAgent();
   const profileResponse = await fetch(`${config.baseUrl}/v1/api/auth/profile`, {
     headers: getCommonHeaders(),
-    agent: getProxyAgent()
+    agent: proxyAgent,
+    timeout: 30000
   });
 
   if (!profileResponse.ok) {
     throw new Error('Token invalid');
   }
-}
-
-// 获取仪表盘数据
-async function getDashboardStats() {
-  try {
-    const response = await fetch(`${config.baseUrl}/v1/api/dashboard-stats`, {
-      headers: getCommonHeaders(),
-      agent: getProxyAgent()
-    });
-
-    if (!response.ok) {
-      console.error('获取仪表盘数据失败:', response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('获取仪表盘数据错误:', error);
-    return null;
-  }
-}
-
-// 获取积分历史
-async function getPointsHistory() {
-  try {
-    const response = await fetch(`${config.baseUrl}/v1/api/points?pageNumber=1&pageSize=5`, {
-      headers: getCommonHeaders(),
-      agent: getProxyAgent()
-    });
-
-    if (!response.ok) {
-      console.error('获取积分历史失败:', response.status);
-      return null;
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('获取积分历史错误:', error);
-    return null;
-  }
-}
-
-// 检查测速资格
-async function checkEligibility() {
-  // 直接返回 true，不进行任何检查
-  return true;
 }
 
 // 执行测速
@@ -246,13 +251,15 @@ async function performSpeedTest() {
       client_session_id: crypto.randomUUID()
     };
 
-    // 获取测速服务器
+    const proxyAgent = await getProxyAgent();
+    
     const locateUrl = new URL('https://locate.measurementlab.net/v2/nearest/ndt/ndt7');
     locateUrl.search = new URLSearchParams(metadata).toString();
     
     console.log('获取测速服务器...');
     const locateResponse = await fetch(locateUrl, {
-      agent: getProxyAgent()
+      agent: proxyAgent,
+      timeout: 30000
     });
 
     if (!locateResponse.ok) {
@@ -274,7 +281,11 @@ async function performSpeedTest() {
     console.log('开始下载测速...');
     let downloadSpeed = 0;
     await new Promise((resolve) => {
-      const ws = new WebSocket(downloadUrl, 'net.measurementlab.ndt.v7');
+      const wsOptions = config.proxy.enabled ? {
+        agent: proxyAgent
+      } : undefined;
+      
+      const ws = new WebSocket(downloadUrl, 'net.measurementlab.ndt.v7', wsOptions);
       let startTime = Date.now();
       let totalBytes = 0;
       let lastMeasurement = null;
@@ -293,7 +304,7 @@ async function performSpeedTest() {
         const now = Date.now();
         const duration = (now - startTime) / 1000;
         if (duration >= 10) {
-          downloadSpeed = (totalBytes * 8) / (duration * 1000000); // Mbps
+          downloadSpeed = (totalBytes * 8) / (duration * 1000000);
           ws.close();
         }
       });
@@ -313,30 +324,32 @@ async function performSpeedTest() {
     console.log('开始上传测速...');
     let uploadSpeed = 0;
     await new Promise((resolve) => {
-      const ws = new WebSocket(uploadUrl, 'net.measurementlab.ndt.v7');
+      const wsOptions = config.proxy.enabled ? {
+        agent: proxyAgent
+      } : undefined;
+      
+      const ws = new WebSocket(uploadUrl, 'net.measurementlab.ndt.v7', wsOptions);
       let startTime = Date.now();
       let totalBytes = 0;
       let lastMeasurement = null;
-      let uploadData = Buffer.alloc(32768); // 增加到 32KB chunks
-      crypto.randomFillSync(uploadData); // 填充随机数据
+      let uploadData = Buffer.alloc(32768);
+      crypto.randomFillSync(uploadData);
 
       ws.on('open', () => {
         startTime = Date.now();
         totalBytes = 0;
-        // Start sending data
         const sendData = () => {
           if (ws.readyState === WebSocket.OPEN) {
             const now = Date.now();
             const duration = (now - startTime) / 1000;
             
             if (duration >= 10) {
-              uploadSpeed = (totalBytes * 8) / (duration * 1000000); // Mbps
+              uploadSpeed = (totalBytes * 8) / (duration * 1000000);
               ws.close();
               return;
             }
 
-            // 调整发送策略
-            while (ws.bufferedAmount < 1024 * 1024) { // 1MB buffer limit
+            while (ws.bufferedAmount < 1024 * 1024) {
               ws.send(uploadData);
               totalBytes += uploadData.length;
             }
@@ -394,14 +407,15 @@ async function reportResults(downloadSpeed, uploadSpeed) {
   try {
     console.log('正在上报...');
 
-    // 上报测速结果
+    const proxyAgent = await getProxyAgent();
     const response = await fetch(`${config.baseUrl}/v1/api/points`, {
       method: 'POST',
       headers: {
         ...getCommonHeaders(),
         'Content-Type': 'application/json'
       },
-      agent: getProxyAgent(),
+      agent: proxyAgent,
+      timeout: 30000,
       body: JSON.stringify({
         download_speed: Math.round(downloadSpeed * 100) / 100,
         upload_speed: Math.round(uploadSpeed * 100) / 100,
@@ -435,10 +449,11 @@ async function displayAccountInfo() {
   try {
     console.log('\n=== 账户信息 ===');
     
-    // 获取用户资料
+    const proxyAgent = await getProxyAgent();
     const profileResponse = await fetch(`${config.baseUrl}/v1/api/auth/profile`, {
       headers: getCommonHeaders(),
-      agent: getProxyAgent()
+      agent: proxyAgent,
+      timeout: 30000
     });
 
     if (profileResponse.ok) {
@@ -462,10 +477,8 @@ async function main() {
     await validateToken();
     console.log('Token 验证: ✅ 有效');
     
-    // 显示账户信息
     await displayAccountInfo();
     
-    // 生成新的随机位置
     config.location = generateRandomLocation();
     console.log(`测速位置: 纬度 ${config.location.latitude}, 经度 ${config.location.longitude}`);
     
@@ -478,7 +491,6 @@ async function main() {
     console.log('\n正在上报结果...');
     const result = await reportResults(downloadSpeed, uploadSpeed);
     
-    // 如果上报成功，再次显示账户信息查看积分变化
     if (result && result.success) {
       console.log('\n结果上报: ✅ 成功');
       await displayAccountInfo();
